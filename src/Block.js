@@ -1,5 +1,5 @@
 import React from 'react';
-import {Placeholder, SelectControl} from '@wordpress/components';
+import {Button, Placeholder, SelectControl} from '@wordpress/components';
 import FetchApi from './FetchApi';
 
 export default class Block extends React.PureComponent {
@@ -12,6 +12,7 @@ export default class Block extends React.PureComponent {
       products: [],
       isProductsLoaded: false,
       isCategoriesLoaded: false,
+      isButtonBusy: false,
       hasError: false,
     };
   }
@@ -61,19 +62,11 @@ export default class Block extends React.PureComponent {
     });
   }
 
-  sync() {
-    FetchApi.sync(this.state.categoryId, this.state.productId, post)
-        .then((response) => {
-          if (response.data.status === 200) {
-            this.setState({
-              products: response.data.body,
-              isProductsLoaded: true,
-              hasError: false,
-            });
-          } else {
-            this.setState({hasError: true});
-          }
-        });
+  sync(categoryId, productId) {
+    this.setState({isButtonBusy: true}, () => {
+      FetchApi.sync(categoryId, productId)
+          .then(() => this.setState({isButtonBusy: false}));
+    });
   }
 
   render() {
@@ -91,8 +84,10 @@ export default class Block extends React.PureComponent {
                   options={this.state.categories}
                   onChange={(categoryId) => {
                     this.setState({categoryId: categoryId});
-                    this.fetchProducts(categoryId);
                     this.props.onCategoryChanged(categoryId);
+                    if (categoryId > 0) {
+                      this.fetchProducts(categoryId);
+                    }
                   }}
               />
               }
@@ -107,6 +102,22 @@ export default class Block extends React.PureComponent {
                     this.props.onProductChanged(productId);
                   }}
               />
+              }
+
+              {this.state.categoryId > 0 && this.state.isCategoriesLoaded &&
+              this.state.productId > 0 && this.state.isProductsLoaded &&
+              <div>
+                {this.state.isButtonBusy ? (
+                    <p>Синхронизируем...</p>
+                ) : (
+                    <Button
+                        onClick={() => this.sync(this.state.categoryId,
+                            this.state.productId)}
+                        isPrimary={true}
+                        isLarge={true}
+                    >Синхронизировать</Button>
+                )}
+              </div>
               }
             </div>
         ) : (

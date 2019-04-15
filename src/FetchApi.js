@@ -24,4 +24,8 @@ export default class FetchApi {
   static fetchProduct(categoryId, productId) {
     return this.callMethod('category/' + categoryId + '/' + productId);
   }
+
+  static sync(categoryId, productId) {
+    return this.callMethod('sync/' + categoryId + '/' + productId);
+  }
 }

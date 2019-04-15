@@ -13,23 +13,27 @@ require_once __DIR__ . '/classes/FetchApi.php';
 // БЛОК
 // Сервер-сайд рендеринг
 function api_fetch_data_block_render($attributes) {
-    $apiUrl = get_option('api_fetch_data_api_url');
-    $apiKey = get_option('api_fetch_data_api_key');
+    global $wpdb;
 
     $categoryId = $attributes['categoryId'];
     $productId = $attributes['productId'];
 
-    if (!$apiUrl || !$apiKey || !$categoryId || !$productId) {
+    if (!$categoryId || !$productId) {
         return '';
     }
 
-    $apiRequest = new FetchApi($apiUrl, $apiKey);
-    $data = $apiRequest->getProduct($categoryId, $productId);
+    $table_name = $wpdb->prefix . 'api_fetch_data';
+
+    $row = $wpdb->get_row('SELECT * FROM ' . $table_name . ' WHERE category_id = ' . $categoryId . ' AND product_id = ' . $productId);
+
+    if (!$row->id) {
+        return '';
+    }
 
     return '<div class="product">
-        <h3>' . $data['name'] . '</h3>
-        <p class="product__description">' . $data['description'] . '</p>
-        <p>Стоимость: ' . $data['price'] . ' руб.</p>
+        <h3>' . $row->title . '</h3>
+        <p class="product__description">' . $row->description . '</p>
+        <p>Стоимость: ' . $row->price . ' руб.</p>
     </div>';
 }
 
@@ -138,6 +142,53 @@ function api_fetch_data_products(WP_REST_Request $request) {
     return $response;
 }
 
+function api_fetch_data_sync_product(WP_REST_Request $request) {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'api_fetch_data';
+
+    $apiUrl = get_option('api_fetch_data_api_url');
+    $apiKey = get_option('api_fetch_data_api_key');
+
+    $categoryId = $request->get_param('categoryId');
+    $productId = $request->get_param('productId');
+
+    $apiRequest = new FetchApi($apiUrl, $apiKey);
+    $data = $apiRequest->getProduct($categoryId, $productId);
+
+    $name = htmlspecialchars($data['name']);
+    $description = htmlspecialchars($data['description']);
+    $price = htmlspecialchars($data['price']);
+
+    $row = $wpdb->get_row('SELECT id FROM ' . $table_name . ' WHERE category_id = ' . $categoryId . ' AND product_id = ' . $productId);
+
+    if ($rowId = $row->id) {
+        $wpdb->update($table_name, [
+            'title' => $name,
+            'description' => $description,
+            'price' => $price
+        ], [
+            'id' => $rowId
+        ]);
+
+    } else {
+        $wpdb->insert(
+            $table_name,
+            [
+                'title' => $name,
+                'description' => $description,
+                'price' => $price,
+                'category_id' => $categoryId,
+                'product_id' => $productId,
+            ]
+        );
+        $rowId = $wpdb->insert_id;
+    }
+
+    $response = new WP_REST_Response(['rowId' => (int)$rowId]);
+    return $response;
+}
+
 add_action('rest_api_init', function () {
     register_rest_route('api', 'categories', [
         'methods' => 'GET',
@@ -148,10 +199,14 @@ add_action('rest_api_init', function () {
         'methods' => 'GET',
         'callback' => 'api_fetch_data_products',
     ]);
+
+    register_rest_route('api', 'sync/(?P<categoryId>\d+)/(?P<productId>\d+)', [
+        'methods' => 'GET',
+        'callback' => 'api_fetch_data_sync_product',
+    ]);
 });
 
 // Хуки
-add_action('post_updated', 'api_fetch_data_post_meta', 10, 3);
 function api_fetch_data_post_meta($post_ID, $post_after, $post_before) {
     $body = $post_after->post_content;
     $params = [];
@@ -173,3 +228,40 @@ function api_fetch_data_post_meta($post_ID, $post_after, $post_before) {
         }
     }
 }
+
+add_action('post_updated', 'api_fetch_data_post_meta', 10, 3);
+
+// Установка/удаление плагина
+function api_fetch_data_install() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'api_fetch_data';
+
+    $sql = 'CREATE TABLE IF NOT EXISTS ' . $table_name . ' (
+		id mediumint(9) NOT NULL AUTO_INCREMENT,
+		title tinytext NULL,
+		description text NULL,
+		price DECIMAL(9, 2) NOT NULL,
+		category_id mediumint(9) NOT NULL,
+		product_id mediumint(9) NOT NULL,
+		
+		PRIMARY KEY  (id)
+	);';
+
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    dbDelta($sql);
+}
+
+function api_fetch_data_uninstall() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'api_fetch_data';
+
+    $sql = 'DROP TABLE IF EXISTS ' . $table_name . ';';
+
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    dbDelta($sql);
+}
+
+register_activation_hook(__FILE__, 'api_fetch_data_install');
+register_deactivation_hook(__FILE__, 'api_fetch_data_uninstall');
