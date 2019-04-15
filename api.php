@@ -232,8 +232,7 @@ function api_fetch_data_uninstall() {
 
     $sql = 'DROP TABLE IF EXISTS ' . $table_name . ';';
 
-    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-    dbDelta($sql);
+    $wpdb->query($sql);
 }
 
 register_activation_hook(__FILE__, 'api_fetch_data_install');
