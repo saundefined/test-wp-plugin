@@ -9,12 +9,11 @@
  **/
 
 require_once __DIR__ . '/classes/FetchApi.php';
+require_once __DIR__ . '/classes/Product.php';
 
 // БЛОК
 // Сервер-сайд рендеринг
 function api_fetch_data_block_render($attributes) {
-    global $wpdb;
-
     $categoryId = $attributes['categoryId'];
     $productId = $attributes['productId'];
 
@@ -22,17 +21,16 @@ function api_fetch_data_block_render($attributes) {
         return '';
     }
 
-    $table_name = $wpdb->prefix . 'api_fetch_data';
-
-    $row = $wpdb->get_row('SELECT * FROM ' . $table_name . ' WHERE category_id = ' . $categoryId . ' AND product_id = ' . $productId);
+    $product = new Product();
+    $row = $product->get($categoryId, $productId);
 
     if (!$row->id) {
         return '';
     }
 
     return '<div class="product">
-        <h3>' . $row->title . '</h3>
-        <p class="product__description">' . $row->description . '</p>
+        <h3>' . htmlspecialchars_decode($row->title) . '</h3>
+        <p class="product__description">' . htmlspecialchars_decode($row->description) . '</p>
         <p>Стоимость: ' . $row->price . ' руб.</p>
     </div>';
 }
@@ -143,10 +141,6 @@ function api_fetch_data_products(WP_REST_Request $request) {
 }
 
 function api_fetch_data_sync_product(WP_REST_Request $request) {
-    global $wpdb;
-
-    $table_name = $wpdb->prefix . 'api_fetch_data';
-
     $apiUrl = get_option('api_fetch_data_api_url');
     $apiKey = get_option('api_fetch_data_api_key');
 
@@ -156,34 +150,11 @@ function api_fetch_data_sync_product(WP_REST_Request $request) {
     $apiRequest = new FetchApi($apiUrl, $apiKey);
     $data = $apiRequest->getProduct($categoryId, $productId);
 
-    $name = htmlspecialchars($data['name']);
-    $description = htmlspecialchars($data['description']);
-    $price = htmlspecialchars($data['price']);
+    $data['categoryId'] = $categoryId;
+    $data['productId'] = $productId;
 
-    $row = $wpdb->get_row('SELECT id FROM ' . $table_name . ' WHERE category_id = ' . $categoryId . ' AND product_id = ' . $productId);
-
-    if ($rowId = $row->id) {
-        $wpdb->update($table_name, [
-            'title' => $name,
-            'description' => $description,
-            'price' => $price
-        ], [
-            'id' => $rowId
-        ]);
-
-    } else {
-        $wpdb->insert(
-            $table_name,
-            [
-                'title' => $name,
-                'description' => $description,
-                'price' => $price,
-                'category_id' => $categoryId,
-                'product_id' => $productId,
-            ]
-        );
-        $rowId = $wpdb->insert_id;
-    }
+    $product = new Product();
+    $rowId = $product->createOrUpdate($data);
 
     $response = new WP_REST_Response(['rowId' => (int)$rowId]);
     return $response;
@@ -220,11 +191,13 @@ function api_fetch_data_post_meta($post_ID, $post_after, $post_before) {
         $productId = $params[2];
 
         if ($apiUrl && $apiKey && $categoryId && $productId) {
-            $apiRequest = new FetchApi($apiUrl, $apiKey);
-            $data = $apiRequest->getProduct($categoryId, $productId);
+            $product = new Product();
+            $row = $product->get($categoryId, $productId);
 
-            update_post_meta($post_ID, 'title', htmlspecialchars($data['title']));
-            update_post_meta($post_ID, 'description', htmlspecialchars($data['description']));
+            if ($row->id) {
+                update_post_meta($post_ID, 'title', htmlspecialchars($row->title));
+                update_post_meta($post_ID, 'description', htmlspecialchars($row->description));
+            }
         }
     }
 }
