@@ -1,5 +1,7 @@
 <?php
 
+namespace Api\Plugin;
+
 class FetchApi
 {
     /**

@@ -1,5 +1,7 @@
 <?php
 
+namespace Api\Plugin;
+
 class Product
 {
     private $wpdb;
@@ -58,7 +60,7 @@ class Product
             AND product_id = ' . $productId);
 
         if (!$row->id) {
-            return new stdClass();
+            return new \stdClass();
         }
 
         return $row;
