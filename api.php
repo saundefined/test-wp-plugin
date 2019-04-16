@@ -204,6 +204,18 @@ function api_fetch_data_post_meta($post_ID, $post_after, $post_before) {
 
 add_action('post_updated', 'api_fetch_data_post_meta', 10, 3);
 
+function api_fetch_data_check_block_count($post_ID, $data) {
+    $body = $data['post_content'];
+    $params = [];
+    preg_match_all('/<!-- wp:api\/fetch-data.*\/-->/', $body, $params);
+
+    if (is_array($params[0]) && count($params[0]) > 1) {
+        wp_die('На странице может быть только один блок Awesome API');
+    }
+}
+
+add_action('pre_post_update', 'api_fetch_data_check_block_count', 10, 2);
+
 // Установка/удаление плагина
 function api_fetch_data_install() {
     global $wpdb;
